@@ -199,23 +199,23 @@ gen_data_SCENARIO_IV  = function(seed, G_par){
   for(i in 1:50){
     raw_data[i, ] = sample_biniary_ts_wSplit_from_G( mu_g1, TT     = 730, 
                                                      matFF  = Z_all,
-                                                     mu0    = G_Par$m0, 
-                                                     Sigma0 = G_Par$S0,
-                                                     G      = G_Par$G1,
-                                                     G_star = G_Par$G2,
-                                                     SigmaEps      = G_Par$Ve, 
-                                                     SigmaEps_star = G_Par$Ves,
+                                                     mu0    = G_par$m0, 
+                                                     Sigma0 = G_par$S0,
+                                                     G      = G_par$G1,
+                                                     G_star = G_par$G2,
+                                                     SigmaEps      = G_par$Ve, 
+                                                     SigmaEps_star = G_par$Ves,
                                                      Tstar         = c(366, 360000) )
   }
   for(i in 51:100){
     raw_data[i, ] = sample_biniary_ts_wSplit_from_G( mu_g2, TT     = 730, 
                                                      matFF  = Z_all,
-                                                     mu0    = G_Par$m0, 
-                                                     Sigma0 = G_Par$S0,
-                                                     G      = G_Par$G1,
-                                                     G_star = G_Par$G2,
-                                                     SigmaEps      = G_Par$Ve, 
-                                                     SigmaEps_star = G_Par$Ves,
+                                                     mu0    = G_par$m0, 
+                                                     Sigma0 = G_par$S0,
+                                                     G      = G_par$G1,
+                                                     G_star = G_par$G2,
+                                                     SigmaEps      = G_par$Ve, 
+                                                     SigmaEps_star = G_par$Ves,
                                                      Tstar         = c(366, 360000) )
   }
   raw_data[rbinom(n = 730*100, size = 1, prob = .1)==1] = NA
