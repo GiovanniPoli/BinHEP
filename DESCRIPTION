@@ -5,7 +5,7 @@ Version: 2.0.0
 Date: 2024-02-15
 License: GPL (>= 3)
 LinkingTo: Rcpp, RcppArmadillo, RcppDist
-Depends: R (>= 3.5), Rcpp, RcppArmadillo, RcppDist
+Depends: R (>= 3.5), Rcpp, RcppArmadillo, RcppDist, readr, stringr
 Authors@R: c(person("Giovanni", "Poli", ,    "giovanni.poli@unifi.it",      role = c("aut", "cre", "cph"), comment = c(ORCID = "0000-0001-9949-0422")),
              person("Beatrice", "Cantoni", , "beatrice.cantoni@utexas.edu", role = "aut",                  comment = c(ORCID = "1234-1234-1234-1233")))
 Description: The HEP package allows for clustering binary time series data in R. It provides a comprehensive set of functions and algorithms tailored to replicate HEP study.
