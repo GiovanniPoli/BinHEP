@@ -17,7 +17,7 @@ where_cut_ts_ext_NA = function(ts){
   return(start:end)
 }
 ## Trt.
-change_last_values     <- function(vec, value){
+change_last_values     = function(vec, value){
   size = length(vec)
   if(vec[size] != value) {
     return(vec)
@@ -25,14 +25,14 @@ change_last_values     <- function(vec, value){
   if(sum(vec==value)==size){
     return(vec)
   }
-  last_value <- max(which(vec != value))
-  vec[(last_value + 1):size] <- vec[last_value]
+  last_value = max(which(vec != value))
+  vec[(last_value + 1):size] = vec[last_value]
   return(vec)
 }
-remove_first_if_unique <- function(vec){
+remove_first_if_unique = function(vec){
   c(ifelse(vec[1] != vec[2], FALSE, TRUE), rep(TRUE, length(vec)-1))
 }
-sub_seq_inside         <- function(vec, len) {
+sub_seq_inside         = function(vec, len) {
   
   size = length(vec)
   length_of_seq = 1
@@ -54,7 +54,7 @@ sub_seq_inside         <- function(vec, len) {
   return(vec)
 }
 ## T*
-set_star_times         <- function(trt){
+set_star_times         = function(trt){
   size = length(trt)
   star_set  = c()
   for(i in 2:size){
@@ -63,9 +63,7 @@ set_star_times         <- function(trt){
   return(star_set)
 }
 
-select_ts = function(data, meta_data, IDs,
-                     trt_index = seq(from = 8, to = 34, by = 2),
-                     verb = FALSE){
+select_ts = function(data, meta_data, IDs, trt_index = seq(from = 8, to = 34, by = 2), verb = FALSE){
   
   trt_names = colnames(data)[trt_index]
   trt_names = stringr::str_remove(trt_names, "YN.")
