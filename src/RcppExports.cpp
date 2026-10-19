@@ -196,6 +196,26 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// sample_biniary_ts_wSplit_from_G_and_Ri
+Rcpp::List sample_biniary_ts_wSplit_from_G_and_Ri(const double mu, const int TT, const arma::mat& matFF, const arma::colvec& mu0, const arma::mat& Sigma0, const arma::mat& G, const arma::mat& G_star, const arma::mat& SigmaEps, const arma::mat& SigmaEps_star, const arma::vec& Tstar);
+RcppExport SEXP _BinHEP_sample_biniary_ts_wSplit_from_G_and_Ri(SEXP muSEXP, SEXP TTSEXP, SEXP matFFSEXP, SEXP mu0SEXP, SEXP Sigma0SEXP, SEXP GSEXP, SEXP G_starSEXP, SEXP SigmaEpsSEXP, SEXP SigmaEps_starSEXP, SEXP TstarSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const double >::type mu(muSEXP);
+    Rcpp::traits::input_parameter< const int >::type TT(TTSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type matFF(matFFSEXP);
+    Rcpp::traits::input_parameter< const arma::colvec& >::type mu0(mu0SEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type Sigma0(Sigma0SEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type G(GSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type G_star(G_starSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type SigmaEps(SigmaEpsSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type SigmaEps_star(SigmaEps_starSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type Tstar(TstarSEXP);
+    rcpp_result_gen = Rcpp::wrap(sample_biniary_ts_wSplit_from_G_and_Ri(mu, TT, matFF, mu0, Sigma0, G, G_star, SigmaEps, SigmaEps_star, Tstar));
+    return rcpp_result_gen;
+END_RCPP
+}
 // SUN_gibbs_collapsed_sampler_v2
 Rcpp::List SUN_gibbs_collapsed_sampler_v2(const Rcpp::List data, const arma::mat X, const Rcpp::CharacterVector IDs, Rcpp::List STATE, const Rcpp::List Prior, const Rcpp::List gPrior, const int sample, const int thinning, const int burn, const int nSim);
 RcppExport SEXP _BinHEP_SUN_gibbs_collapsed_sampler_v2(SEXP dataSEXP, SEXP XSEXP, SEXP IDsSEXP, SEXP STATESEXP, SEXP PriorSEXP, SEXP gPriorSEXP, SEXP sampleSEXP, SEXP thinningSEXP, SEXP burnSEXP, SEXP nSimSEXP) {
@@ -420,6 +440,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_BinHEP_rcpp_get_Ri_wSplit_from_eta", (DL_FUNC) &_BinHEP_rcpp_get_Ri_wSplit_from_eta, 2},
     {"_BinHEP_sample_Ri_under_g_wSplit", (DL_FUNC) &_BinHEP_sample_Ri_under_g_wSplit, 10},
     {"_BinHEP_sample_biniary_ts_wSplit_from_G", (DL_FUNC) &_BinHEP_sample_biniary_ts_wSplit_from_G, 10},
+    {"_BinHEP_sample_biniary_ts_wSplit_from_G_and_Ri", (DL_FUNC) &_BinHEP_sample_biniary_ts_wSplit_from_G_and_Ri, 10},
     {"_BinHEP_SUN_gibbs_collapsed_sampler_v2", (DL_FUNC) &_BinHEP_SUN_gibbs_collapsed_sampler_v2, 10},
     {"_BinHEP_SUN_gibbs_collapsed_sampler_v2_Store_Ri_and_delta", (DL_FUNC) &_BinHEP_SUN_gibbs_collapsed_sampler_v2_Store_Ri_and_delta, 10},
     {"_BinHEP_rcpp_get_Ri_wSplit_v3", (DL_FUNC) &_BinHEP_rcpp_get_Ri_wSplit_v3, 3},

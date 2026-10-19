@@ -1160,6 +1160,51 @@ arma::ivec sample_biniary_ts_wSplit_from_G( const double         mu,
   return  BinTS;
 } 
 
+// [[Rcpp::export]]
+Rcpp::List sample_biniary_ts_wSplit_from_G_and_Ri( const double         mu,
+                                                   const int            TT,
+                                                   const arma::mat    & matFF,
+                                                   const arma::colvec & mu0,
+                                                   const arma::mat    & Sigma0,
+                                                   const arma::mat    & G,
+                                                   const arma::mat    & G_star, 
+                                                   const arma::mat    & SigmaEps,
+                                                   const arma::mat    & SigmaEps_star,
+                                                   const arma::vec    & Tstar ){
+  
+  const int p = mu0.n_elem ;
+  arma::vec theta_it(p);
+  
+  const arma::colvec zero_ex_ev = arma::zeros<arma::vec>(p);
+  
+  int star_count = 0;
+  int star_times_minus_1 = Tstar.n_elem - 1;
+  
+  arma::mat Theta(TT, p) ;
+  arma::ivec BinTS(TT) ;
+  
+  theta_it = mvrnormArma1( mu0, Sigma0) ;
+  
+  for (int tt = 0; tt < TT; ++tt){
+    
+    if(tt != Tstar(star_count)){
+      theta_it = G * theta_it + mvrnormArma1( zero_ex_ev, SigmaEps) ;
+    }else{ 
+      theta_it = G_star * theta_it + mvrnormArma1( zero_ex_ev, SigmaEps_star) ;      
+      if(star_times_minus_1 != star_count) star_count = star_count + 1; 
+    }
+    Theta.row(tt) = theta_it.t() ;
+  }
+  arma::vec probs = arma::normcdf( mu + arma::sum(Theta % matFF,1));
+  arma::vec u     = arma::randu(probs.n_elem) ;
+  
+  BinTS =  arma::conv_to<arma::ivec>::from(probs > u) ;
+  int Ri = rcpp_get_Ri_wSplit_from_eta(mu + arma::sum(Theta % matFF,1), Tstar) ;
+  return  Rcpp::List::create(
+    Rcpp::Named("BinTS") = BinTS,
+    Rcpp::Named("Ri")    = Ri );
+} 
+
 // ============================================================
 //  Updates steps for MCMC
 // ============================================================
@@ -2972,101 +3017,101 @@ Rcpp::List rcpp_update_Ri_gamma_and_rho_v4(
 
 
 //' Collapsed Gibbs sampler for the SUN-DPM model (full output)
- //'
- //' @description
- //' Runs a collapsed Gibbs sampler for the model described in the paper. 
- //'
- //' For a memory-efficient variant that stores only
- //' \eqn{(\boldsymbol{\delta}, \mathbf{R})} see
- //' \code{\link{SUN_gibbs_collapsed_sampler_v2_Store_Ri_and_delta}}.
- //'
- //' @param data
- //'   Named \code{Rcpp::List} of length \eqn{n}.  Each element is itself a
- //'   list with at least a field \code{"ts"} (the binary time series for
- //'   subject \eqn{i}) and any covariates needed by the update functions.
- //' @param X
- //'   \eqn{n \times q} matrix of subject-level static covariates
- //'   \eqn{\mathbf{x}_i}.  Used to build the stacked probit design matrix
- //'   and forwarded to the state-trajectory update.
- //' @param IDs
- //'   Character vector of length \eqn{n} with subject identifiers.
- //' @param STATE
- //'   Named \code{Rcpp::List} holding the current MCMC state.  Must contain
- //'   at least the fields \code{"rho"}, \code{"delta"}, \code{"xi"},
- //'   \code{"Gamma"}, and \code{"Ri"}.  Modified in place at each sweep.
- //' @param Prior
- //'   Named list of hyperparameters for the DP and probit blocks:
- //'   \describe{
- //'     \item{\code{"a"}}{Concentration vector \eqn{\mathbf{a}} of the
- //'       base-measure Dirichlet prior on \eqn{\boldsymbol{\xi}^*}.}
- //'     \item{\code{"M"}}{DP precision parameter \eqn{M > 0}.}
- //'     \item{\code{"sigma"}}{Discount parameter \eqn{\sigma}.}
- //'     \item{\code{"d0"}}{Prior mean vector for \eqn{\boldsymbol{\delta}}.}
- //'     \item{\code{"D0"}}{Diagonal of the prior precision matrix
- //'       \eqn{\mathbf{D}_0} for \eqn{\boldsymbol{\delta}}.}
- //'   }
- //' @param gPrior
- //'   Named list of state-space prior hyperparameters for the DLM prior
- //'   \eqn{g}:
- //'   \describe{
- //'     \item{\code{"m0"}, \code{"S0"}}{Prior mean and covariance of the
- //'       initial state \eqn{\mathbf{x}_0}.}
- //'     \item{\code{"G1"}, \code{"G2"}}{Baseline and alternative-regime
- //'       transition matrices \eqn{\mathbf{G}} and \eqn{\mathbf{G}^*}.}
- //'     \item{\code{"Ve"}, \code{"Ves"}}{Baseline and alternative-regime
- //'       innovation covariances
- //'       \eqn{\boldsymbol{\Sigma}_\varepsilon} and
- //'       \eqn{\boldsymbol{\Sigma}_\varepsilon^*}.}
- //'     \item{\code{"gli"}}{\eqn{8 \times K} matrix mapping each risk
- //'       category \eqn{R_i \in \{0,\ldots,7\}} to a cluster probability
- //'       vector.}
- //'   }
- //' @param sample    Number of posterior draws to store.
- //'   Default: \code{2000}.
- //' @param thinning  Store one sample every \code{thinning} post-burn-in.
- //'   Default: \code{10}.
- //' @param burn      Number of burn-in.
- //'   Default: \code{1000}.
- //' @param nSim      Number of SMC particles forwarded to the trajectory
- //'   sampler inside \code{rcpp_update_Ri_gamma_and_rho}.
- //'   Default: \code{100}.
- //'
- //' @return A named \code{Rcpp::List} with five fields, each of length
- //'   \code{sample}:
- //'   \describe{
- //'     \item{\code{delta}}{\eqn{\texttt{sample} \times q} matrix of draws
- //'       of the probit coefficient vector \eqn{\boldsymbol{\delta}}.}
- //'     \item{\code{rho}}{\eqn{\texttt{sample} \times n} matrix of cluster
- //'       assignment draws \eqn{\boldsymbol{\rho}}.}
- //'     \item{\code{xi_star}}{List of \code{sample} draws of the cluster
- //'       atom matrix \eqn{\boldsymbol{\xi}^*}.}
- //'     \item{\code{Gamma}}{List of \code{sample} draws of the latent state
- //'       trajectories \eqn{\boldsymbol{\Gamma}}.}
- //'     \item{\code{Ri}}{List of \code{sample} draws of the risk index
- //'       vector \eqn{\mathbf{R} = (R_1, \ldots, R_n)}.}
- //'   }
- //'
- //' @seealso
- //'   \code{\link{SUN_gibbs_collapsed_sampler_v2_Store_Ri_and_delta}},
- //'   \code{\link{rcpp_get_Ri_wSplit}},
- //'   \code{\link{rcpp_rCenteredLinearPredictor_RaoBlackwellAuxSMC}}
- //'
- //' @examples
- //' \dontrun{
- //' fit <- SUN_gibbs_collapsed_sampler_v2(
- //'   data     = subject_list,
- //'   X        = X_mat,
- //'   IDs      = ids,
- //'   STATE    = initial_state,
- //'   Prior    = prior_list,
- //'   gPrior   = g_prior_list,
- //'   sample   = 2000L,
- //'   thinning = 10L,
- //'   burn     = 1000L,
- //'   nSim     = 100L
- //' )
- // [[Rcpp::export]]
- Rcpp::List SUN_gibbs_collapsed_sampler_v4( const Rcpp::List data,
+//'
+//' @description
+//' Runs a collapsed Gibbs sampler for the model described in the paper. 
+//'
+//' For a memory-efficient variant that stores only
+//' \eqn{(\boldsymbol{\delta}, \mathbf{R})} see
+//' \code{\link{SUN_gibbs_collapsed_sampler_v2_Store_Ri_and_delta}}.
+//'
+//' @param data
+//'   Named \code{Rcpp::List} of length \eqn{n}.  Each element is itself a
+//'   list with at least a field \code{"ts"} (the binary time series for
+//'   subject \eqn{i}) and any covariates needed by the update functions.
+//' @param X
+//'   \eqn{n \times q} matrix of subject-level static covariates
+//'   \eqn{\mathbf{x}_i}.  Used to build the stacked probit design matrix
+//'   and forwarded to the state-trajectory update.
+//' @param IDs
+//'   Character vector of length \eqn{n} with subject identifiers.
+//' @param STATE
+//'   Named \code{Rcpp::List} holding the current MCMC state.  Must contain
+//'   at least the fields \code{"rho"}, \code{"delta"}, \code{"xi"},
+//'   \code{"Gamma"}, and \code{"Ri"}.  Modified in place at each sweep.
+//' @param Prior
+//'   Named list of hyperparameters for the DP and probit blocks:
+//'   \describe{
+//'     \item{\code{"a"}}{Concentration vector \eqn{\mathbf{a}} of the
+//'       base-measure Dirichlet prior on \eqn{\boldsymbol{\xi}^*}.}
+//'     \item{\code{"M"}}{DP precision parameter \eqn{M > 0}.}
+//'     \item{\code{"sigma"}}{Discount parameter \eqn{\sigma}.}
+//'     \item{\code{"d0"}}{Prior mean vector for \eqn{\boldsymbol{\delta}}.}
+//'     \item{\code{"D0"}}{Diagonal of the prior precision matrix
+//'       \eqn{\mathbf{D}_0} for \eqn{\boldsymbol{\delta}}.}
+//'   }
+//' @param gPrior
+//'   Named list of state-space prior hyperparameters for the DLM prior
+//'   \eqn{g}:
+//'   \describe{
+//'     \item{\code{"m0"}, \code{"S0"}}{Prior mean and covariance of the
+//'       initial state \eqn{\mathbf{x}_0}.}
+//'     \item{\code{"G1"}, \code{"G2"}}{Baseline and alternative-regime
+//'       transition matrices \eqn{\mathbf{G}} and \eqn{\mathbf{G}^*}.}
+//'     \item{\code{"Ve"}, \code{"Ves"}}{Baseline and alternative-regime
+//'       innovation covariances
+//'       \eqn{\boldsymbol{\Sigma}_\varepsilon} and
+//'       \eqn{\boldsymbol{\Sigma}_\varepsilon^*}.}
+//'     \item{\code{"gli"}}{\eqn{8 \times K} matrix mapping each risk
+//'       category \eqn{R_i \in \{0,\ldots,7\}} to a cluster probability
+//'       vector.}
+//'   }
+//' @param sample    Number of posterior draws to store.
+//'   Default: \code{2000}.
+//' @param thinning  Store one sample every \code{thinning} post-burn-in.
+//'   Default: \code{10}.
+//' @param burn      Number of burn-in.
+//'   Default: \code{1000}.
+//' @param nSim      Number of SMC particles forwarded to the trajectory
+//'   sampler inside \code{rcpp_update_Ri_gamma_and_rho}.
+//'   Default: \code{100}.
+//'
+//' @return A named \code{Rcpp::List} with five fields, each of length
+//'   \code{sample}:
+//'   \describe{
+//'     \item{\code{delta}}{\eqn{\texttt{sample} \times q} matrix of draws
+//'       of the probit coefficient vector \eqn{\boldsymbol{\delta}}.}
+//'     \item{\code{rho}}{\eqn{\texttt{sample} \times n} matrix of cluster
+//'       assignment draws \eqn{\boldsymbol{\rho}}.}
+//'     \item{\code{xi_star}}{List of \code{sample} draws of the cluster
+//'       atom matrix \eqn{\boldsymbol{\xi}^*}.}
+//'     \item{\code{Gamma}}{List of \code{sample} draws of the latent state
+//'       trajectories \eqn{\boldsymbol{\Gamma}}.}
+//'     \item{\code{Ri}}{List of \code{sample} draws of the risk index
+//'       vector \eqn{\mathbf{R} = (R_1, \ldots, R_n)}.}
+//'   }
+//'
+//' @seealso
+//'   \code{\link{SUN_gibbs_collapsed_sampler_v2_Store_Ri_and_delta}},
+//'   \code{\link{rcpp_get_Ri_wSplit}},
+//'   \code{\link{rcpp_rCenteredLinearPredictor_RaoBlackwellAuxSMC}}
+//'
+//' @examples
+//' \dontrun{
+//' fit <- SUN_gibbs_collapsed_sampler_v2(
+//'   data     = subject_list,
+//'   X        = X_mat,
+//'   IDs      = ids,
+//'   STATE    = initial_state,
+//'   Prior    = prior_list,
+//'   gPrior   = g_prior_list,
+//'   sample   = 2000L,
+//'   thinning = 10L,
+//'   burn     = 1000L,
+//'   nSim     = 100L
+//' )
+// [[Rcpp::export]]
+Rcpp::List SUN_gibbs_collapsed_sampler_v4( const Rcpp::List data,
                                             const arma::mat X,
                                             const Rcpp::CharacterVector IDs,
                                             Rcpp::List STATE,
@@ -3237,194 +3282,194 @@ Rcpp::List rcpp_update_Ri_gamma_and_rho_v4(
 
 
 //' Collapsed Gibbs sampler for the SUN model (lightweight output)
- //'
- //' @description
- //' Memory-efficient variant of
- //' \code{\link{SUN_gibbs_collapsed_sampler_v2}}.  
- //'
- //' Use this variant when:
- //' \itemize{
- //'   \item only posterior inference on \eqn{\boldsymbol{\delta}} and the
- //'     summaries statistics classification \eqn{p(R_i = r \mid \mathbf{y})} is needed;
- //'   \item the number of subjects \eqn{n} or series length \eqn{T} makes
- //'     storing full trajectories prohibitive.
- //' }
- //'
- //' All parameters are identical to
- //' \code{\link{SUN_gibbs_collapsed_sampler_v2}}; see that page for full
- //' descriptions.
- //'
- //' @inheritParams SUN_gibbs_collapsed_sampler_v2
- //'
- //' @return A named \code{Rcpp::List} with two fields:
- //'   \describe{
- //'     \item{\code{delta}}{\eqn{\texttt{sample} \times q} matrix of draws
- //'       of \eqn{\boldsymbol{\delta}}.}
- //'     \item{\code{Ri}}{List of \code{sample} draws of the risk index
- //'       vector \eqn{\mathbf{R} = (R_1, \ldots, R_n)}.}
- //'   }
- //'
- //' @seealso \code{\link{SUN_gibbs_collapsed_sampler_v2}}
- //'
- //' @examples
- //' \dontrun{
- //' }
- // [[Rcpp::export]]
- Rcpp::List SUN_gibbs_collapsed_sampler_v2_Store_Ri_and_delta_v4( const Rcpp::List data,
-                                                                  const arma::mat X,
-                                                                  const Rcpp::CharacterVector IDs,
-                                                                  Rcpp::List STATE,
-                                                                  const Rcpp::List  Prior,
-                                                                  const Rcpp::List gPrior,
-                                                                  const int sample = 2000,
-                                                                  const int thinning = 10,
-                                                                  const int burn = 1000,
-                                                                  const int nSim = 100){
-   
-   std::string msg = "Creating Constant for the MCMC...\n" ;
-   Rcpp::Rcout << msg << std::flush ;
-   
-   const int n = IDs.size();
-   
-   const  arma::vec a = Prior["a"];
-   double M = Prior["M"];
-   double sigma = Prior["sigma"];
-   arma::vec sg = Rcpp::as<arma::vec>( STATE["rho"] ) ;
-   arma::ivec gTable_int   = rcpp_arma_table(sg);
-   
-   const arma::vec mu0_int            = Rcpp::as<arma::vec>(gPrior["m0"]);
-   const arma::mat Sigma0_int         = Rcpp::as<arma::mat>(gPrior["S0"]);
-   const arma::mat G_int              = Rcpp::as<arma::mat>(gPrior["G1"]);
-   const arma::mat G_star_int         = Rcpp::as<arma::mat>(gPrior["G2"]);  
-   const arma::mat SigmaEps_int       = Rcpp::as<arma::mat>(gPrior["Ve"]);
-   const arma::mat SigmaEps_star_int  = Rcpp::as<arma::mat>(gPrior["Ves"]);
-   const arma::mat gl_matrix          = Rcpp::as<arma::mat>(gPrior["gli"]);
-   arma::colvec delta_it ; 
-   
-   const int q = X.n_cols ;       // x_i
-   const int p = mu0_int.n_elem ; // z_itK
-   
-   arma::mat  return_delta(sample, q) ;
-   Rcpp::List return_Ri_list(sample) ;
-   
-   Rcpp::List list_of_updates ;
-   
-   Rcpp::IntegerVector y_it ; 
-   arma::vec xi_it ;
-   arma::mat Zi_it ;
-   Rcpp::IntegerVector Tstar_it ;
-   double Ti_it ;  
-   
-   int AR_thetas ;
-   int AR_delta ;
-   
-   // For Probit data augmentation 
-   Rcpp::List Indeces_for_obs( n ) ;
-   
-   // DV 
-   Rcpp::List SubjectData_intern;
-   arma::vec y_intern ; 
-   arma::rowvec xi_intern ;
-   arma::uvec pos ;
-   
-   arma::mat    X_probit ;
-   arma::colvec y_probit ;
-   y_probit.set_size( 0 ) ; 
-   
-   const arma::vec d0 = Rcpp::as<arma::vec>( Prior["d0"] ) ;
-   const arma::mat D0 = arma::diagmat( Rcpp::as<arma::vec>( Prior["D0"])) ;
-   
-   for ( int subject = 0; subject < n; ++subject ) {
-     
-     SubjectData_intern  = data[ subject ] ;
-     
-     y_intern = Rcpp::as<arma::vec>(SubjectData_intern["ts"]) ; 
-     xi_intern = X.row(subject)  ;
-     
-     pos =  arma::find( (y_intern == 1 ) || (y_intern == 0) ) ;
-     
-     Indeces_for_obs[subject] = pos ;
-     
-     switch( subject ) {
-     case 0:
-       X_probit = arma::repmat( xi_intern, pos.n_elem, 1) ; 
-       break;
-     default:
-       X_probit =  cpp_rbind( X_probit, arma::repmat( xi_intern, pos.n_elem, 1)); 
-     }
-     
-     y_probit = arma::join_cols( y_probit, y_intern( pos ) ) ;
-   }
-   
-   arma::colvec lower_limits( y_probit.n_elem ) ;
-   arma::colvec upper_limits( y_probit.n_elem ) ;
-   
-   lower_limits.elem( arma::find( y_probit == 1 ) ).fill( 0.0 ) ;
-   lower_limits.elem( arma::find( y_probit == 0 ) ).fill( R_NegInf ) ;
-   
-   upper_limits.elem( arma::find( y_probit == 1 ) ).fill( R_PosInf ) ;
-   upper_limits.elem( arma::find( y_probit == 0 ) ).fill( 0.0 ) ;
-   
-   arma::mat invD0 = arma::inv( D0 ) ;
-   arma::mat V = arma::inv( D0 + X_probit.t() * X_probit )  ; 
-   
-   
-   // Gibbs
-   
-   int SampleStored = 0;
-   const int MaxIteration = burn + sample * thinning ;
-   
-   // MCMC
-   msg = "Running the chain...\n";
-   Rcpp::Rcout << msg << std::endl;
-   
-   for (int it = 0; it < MaxIteration; ++it) {
-     
-     Rcpp::Rcout << "\r"  << " " << "[" << it << "/" << MaxIteration << "]            "  << std::flush;
-     
-     // MCMC CORE 
-     
-     // Theta {i=1, ... , N}
-     list_of_updates = rcpp_update_Ri_gamma_and_rho_v4(
-       data, STATE, gTable_int,
-       IDs, a, M, sigma,
-       mu0_int, Sigma0_int,
-       G_int, G_star_int,
-       SigmaEps_int, SigmaEps_star_int,
-       X, gl_matrix,
-       AR_thetas) ;
-     
-     STATE["Gamma"] = list_of_updates["up_Gamma"] ;
-     STATE["Ri"]    = Rcpp::as<arma::colvec>(list_of_updates["up_Ri"])    ; 
-     STATE["xi"]    = Rcpp::as<arma::mat>(list_of_updates["up_xi"]) ;
-     STATE["rho"]   = Rcpp::as<arma::colvec>(list_of_updates["up_rho"]) ; 
-     gTable_int     = Rcpp::as<arma::ivec>(list_of_updates["up_table"]) ;
-     AR_thetas      = list_of_updates["up_AR"]    ;
-     
-     // Xi moving
-     STATE["xi"] = rcpp_update_xi_star( STATE, a) ;
-     
-     // delta
-     STATE["delta"] = rcpp_update_delta_v2( STATE, n,
-                                       y_probit, X_probit, 
-                                       lower_limits, upper_limits,
-                                       Indeces_for_obs, 
-                                       invD0, d0, V ) ;
-     
-     // STORE
-     if ( it >= burn && ( (it - burn) % thinning == 0 ) ) {
-       return_delta.row(SampleStored)  = Rcpp::as<arma::rowvec>(STATE["delta"]) ;
-       return_Ri_list[SampleStored]    = STATE["Ri"]    ;
-       
-       SampleStored = SampleStored + 1;
-     }
-     // Rcpp::Rcout <<  Rcpp::as<arma::rowvec>(STATE["delta"]) << std::flush;
-     // Rcpp::Rcout <<  Rcpp::as<arma::mat>(STATE["xi"]) << std::flush;
-     // Rcpp::Rcout <<  gTable_int << std::flush;
-   } 
-   
-   Rcpp::Rcout << "\r"   << " " << "[" << MaxIteration << "/" << MaxIteration << "]             "  << std::flush;
-   
-   return Rcpp::List::create( Rcpp::Named("delta")   = return_delta,
-                              Rcpp::Named("Ri")      = return_Ri_list );
- }  
+//'
+//' @description
+//' Memory-efficient variant of
+//' \code{\link{SUN_gibbs_collapsed_sampler_v2}}.  
+//'
+//' Use this variant when:
+//' \itemize{
+//'   \item only posterior inference on \eqn{\boldsymbol{\delta}} and the
+//'     summaries statistics classification \eqn{p(R_i = r \mid \mathbf{y})} is needed;
+//'   \item the number of subjects \eqn{n} or series length \eqn{T} makes
+//'     storing full trajectories prohibitive.
+//' }
+//'
+//' All parameters are identical to
+//' \code{\link{SUN_gibbs_collapsed_sampler_v2}}; see that page for full
+//' descriptions.
+//'
+//' @inheritParams SUN_gibbs_collapsed_sampler_v2
+//'
+//' @return A named \code{Rcpp::List} with two fields:
+//'   \describe{
+//'     \item{\code{delta}}{\eqn{\texttt{sample} \times q} matrix of draws
+//'       of \eqn{\boldsymbol{\delta}}.}
+//'     \item{\code{Ri}}{List of \code{sample} draws of the risk index
+//'       vector \eqn{\mathbf{R} = (R_1, \ldots, R_n)}.}
+//'   }
+//'
+//' @seealso \code{\link{SUN_gibbs_collapsed_sampler_v2}}
+//'
+//' @examples
+//' \dontrun{
+//' }
+// [[Rcpp::export]]
+Rcpp::List SUN_gibbs_collapsed_sampler_v2_Store_Ri_and_delta_v4( const Rcpp::List data,
+                                                                 const arma::mat X,
+                                                                 const Rcpp::CharacterVector IDs,
+                                                                 Rcpp::List STATE,
+                                                                 const Rcpp::List  Prior,
+                                                                 const Rcpp::List gPrior,
+                                                                 const int sample = 2000,
+                                                                 const int thinning = 10,
+                                                                 const int burn = 1000,
+                                                                 const int nSim = 100){
+  
+  std::string msg = "Creating Constant for the MCMC...\n" ;
+  Rcpp::Rcout << msg << std::flush ;
+  
+  const int n = IDs.size();
+  
+  const  arma::vec a = Prior["a"];
+  double M = Prior["M"];
+  double sigma = Prior["sigma"];
+  arma::vec sg = Rcpp::as<arma::vec>( STATE["rho"] ) ;
+  arma::ivec gTable_int   = rcpp_arma_table(sg);
+  
+  const arma::vec mu0_int            = Rcpp::as<arma::vec>(gPrior["m0"]);
+  const arma::mat Sigma0_int         = Rcpp::as<arma::mat>(gPrior["S0"]);
+  const arma::mat G_int              = Rcpp::as<arma::mat>(gPrior["G1"]);
+  const arma::mat G_star_int         = Rcpp::as<arma::mat>(gPrior["G2"]);  
+  const arma::mat SigmaEps_int       = Rcpp::as<arma::mat>(gPrior["Ve"]);
+  const arma::mat SigmaEps_star_int  = Rcpp::as<arma::mat>(gPrior["Ves"]);
+  const arma::mat gl_matrix          = Rcpp::as<arma::mat>(gPrior["gli"]);
+  arma::colvec delta_it ; 
+  
+  const int q = X.n_cols ;       // x_i
+  const int p = mu0_int.n_elem ; // z_itK
+  
+  arma::mat  return_delta(sample, q) ;
+  Rcpp::List return_Ri_list(sample) ;
+  
+  Rcpp::List list_of_updates ;
+  
+  Rcpp::IntegerVector y_it ; 
+  arma::vec xi_it ;
+  arma::mat Zi_it ;
+  Rcpp::IntegerVector Tstar_it ;
+  double Ti_it ;  
+  
+  int AR_thetas ;
+  int AR_delta ;
+  
+  // For Probit data augmentation 
+  Rcpp::List Indeces_for_obs( n ) ;
+  
+  // DV 
+  Rcpp::List SubjectData_intern;
+  arma::vec y_intern ; 
+  arma::rowvec xi_intern ;
+  arma::uvec pos ;
+  
+  arma::mat    X_probit ;
+  arma::colvec y_probit ;
+  y_probit.set_size( 0 ) ; 
+  
+  const arma::vec d0 = Rcpp::as<arma::vec>( Prior["d0"] ) ;
+  const arma::mat D0 = arma::diagmat( Rcpp::as<arma::vec>( Prior["D0"])) ;
+  
+  for ( int subject = 0; subject < n; ++subject ) {
+    
+    SubjectData_intern  = data[ subject ] ;
+    
+    y_intern = Rcpp::as<arma::vec>(SubjectData_intern["ts"]) ; 
+    xi_intern = X.row(subject)  ;
+    
+    pos =  arma::find( (y_intern == 1 ) || (y_intern == 0) ) ;
+    
+    Indeces_for_obs[subject] = pos ;
+    
+    switch( subject ) {
+    case 0:
+      X_probit = arma::repmat( xi_intern, pos.n_elem, 1) ; 
+      break;
+    default:
+      X_probit =  cpp_rbind( X_probit, arma::repmat( xi_intern, pos.n_elem, 1)); 
+    }
+    
+    y_probit = arma::join_cols( y_probit, y_intern( pos ) ) ;
+  }
+  
+  arma::colvec lower_limits( y_probit.n_elem ) ;
+  arma::colvec upper_limits( y_probit.n_elem ) ;
+  
+  lower_limits.elem( arma::find( y_probit == 1 ) ).fill( 0.0 ) ;
+  lower_limits.elem( arma::find( y_probit == 0 ) ).fill( R_NegInf ) ;
+  
+  upper_limits.elem( arma::find( y_probit == 1 ) ).fill( R_PosInf ) ;
+  upper_limits.elem( arma::find( y_probit == 0 ) ).fill( 0.0 ) ;
+  
+  arma::mat invD0 = arma::inv( D0 ) ;
+  arma::mat V = arma::inv( D0 + X_probit.t() * X_probit )  ; 
+  
+  
+  // Gibbs
+  
+  int SampleStored = 0;
+  const int MaxIteration = burn + sample * thinning ;
+  
+  // MCMC
+  msg = "Running the chain...\n";
+  Rcpp::Rcout << msg << std::endl;
+  
+  for (int it = 0; it < MaxIteration; ++it) {
+    
+    Rcpp::Rcout << "\r"  << " " << "[" << it << "/" << MaxIteration << "]            "  << std::flush;
+    
+    // MCMC CORE 
+    
+    // Theta {i=1, ... , N}
+    list_of_updates = rcpp_update_Ri_gamma_and_rho_v4(
+      data, STATE, gTable_int,
+      IDs, a, M, sigma,
+      mu0_int, Sigma0_int,
+      G_int, G_star_int,
+      SigmaEps_int, SigmaEps_star_int,
+      X, gl_matrix,
+      AR_thetas) ;
+    
+    STATE["Gamma"] = list_of_updates["up_Gamma"] ;
+    STATE["Ri"]    = Rcpp::as<arma::colvec>(list_of_updates["up_Ri"])    ; 
+    STATE["xi"]    = Rcpp::as<arma::mat>(list_of_updates["up_xi"]) ;
+    STATE["rho"]   = Rcpp::as<arma::colvec>(list_of_updates["up_rho"]) ; 
+    gTable_int     = Rcpp::as<arma::ivec>(list_of_updates["up_table"]) ;
+    AR_thetas      = list_of_updates["up_AR"]    ;
+    
+    // Xi moving
+    STATE["xi"] = rcpp_update_xi_star( STATE, a) ;
+    
+    // delta
+    STATE["delta"] = rcpp_update_delta_v2( STATE, n,
+                                      y_probit, X_probit, 
+                                      lower_limits, upper_limits,
+                                      Indeces_for_obs, 
+                                      invD0, d0, V ) ;
+    
+    // STORE
+    if ( it >= burn && ( (it - burn) % thinning == 0 ) ) {
+      return_delta.row(SampleStored)  = Rcpp::as<arma::rowvec>(STATE["delta"]) ;
+      return_Ri_list[SampleStored]    = STATE["Ri"]    ;
+      
+      SampleStored = SampleStored + 1;
+    }
+    // Rcpp::Rcout <<  Rcpp::as<arma::rowvec>(STATE["delta"]) << std::flush;
+    // Rcpp::Rcout <<  Rcpp::as<arma::mat>(STATE["xi"]) << std::flush;
+    // Rcpp::Rcout <<  gTable_int << std::flush;
+  } 
+  
+  Rcpp::Rcout << "\r"   << " " << "[" << MaxIteration << "/" << MaxIteration << "]             "  << std::flush;
+  
+  return Rcpp::List::create( Rcpp::Named("delta")   = return_delta,
+                             Rcpp::Named("Ri")      = return_Ri_list );
+}  
